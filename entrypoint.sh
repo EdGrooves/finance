@@ -16,5 +16,8 @@ chown -R "$PUID:$PGID" /app/data
 echo "Running database migrations..."
 su-exec "$PUID:$PGID" npx prisma migrate deploy --schema ./prisma/schema.prisma
 
+echo "Seeding database..."
+su-exec "$PUID:$PGID" npx prisma db seed --schema ./prisma/schema.prisma
+
 echo "Starting server..."
 exec su-exec "$PUID:$PGID" node dist/server.js

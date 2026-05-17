@@ -25,6 +25,7 @@ WORKDIR /app
 COPY --from=server-build /app/node_modules ./node_modules
 COPY --from=server-build /app/dist ./dist
 COPY --from=server-build /app/prisma ./prisma
+COPY --from=server-build /app/package.json ./package.json
 
 # Frontend static files served by Express
 COPY --from=frontend-build /app/dist ./public
