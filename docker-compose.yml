@@ -1,0 +1,13 @@
+services:
+  app:
+    image: ghcr.io/${GITHUB_REPOSITORY:-your-user/finance}:latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: file:/app/data/finance.db
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+    restart: unless-stopped

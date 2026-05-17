@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+server/dist/
+
+# Environment & secrets
+.env
+server/.env
+
+# Database
+server/prisma/dev.db
+server/prisma/dev.db-journal
+data/
+
+# Coverage
+coverage/
+server/coverage/
+
+# Misc
+.DS_Store
+*.log

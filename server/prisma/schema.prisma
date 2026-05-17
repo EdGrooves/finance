@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String       @id @default(cuid())
+  email     String       @unique
+  name      String
+  passwordHash String
+  color     String       @default("#10b981")
+  createdAt DateTime     @default(now())
+
+  transactionsPaid Transaction[] @relation("UserTransactionsPaid")
+  splits           ExpenseSplit[]
+  fixedCosts       FixedCost[]
+  settings         UserSettings?
+  settlementsAsPayer Settlement[] @relation("PayerSettlements")
+  settlementsAsPayee Settlement[] @relation("PayeeSettlements")
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  description String
+  amount      Decimal
+  category    String
+  date        DateTime
+  paidById    String
+  paidBy      User              @relation("UserTransactionsPaid", fields: [paidById], references: [id])
+  isShared    Boolean           @default(false)
+  isFixed     Boolean           @default(false)
+  /// Allowed values: "CSV_IMPORT", "MANUAL_ENTRY", "SYSTEM_SETTLEMENT"
+  origin      String            @default("MANUAL_ENTRY")
+  createdAt   DateTime          @default(now())
+
+  splits      ExpenseSplit[]
+  settlement  Settlement?
+}
+
+model ExpenseSplit {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  amount        Decimal?
+  percentage    Float?
+}
+
+model FixedCost {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  name          String
+  amount        Decimal
+  category      String
+  frequency     String   // WEEK, MONTH, YEAR
+  frequencyEvery Int     @default(1)
+  startDate     DateTime @default(now())
+  nextDueDate   DateTime
+  isShared      Boolean  @default(false)
+  /// JSON string of default splits, parsed in application code
+  defaultSplits String?
+  endDate       DateTime?
+  archivedAt    DateTime?
+  /// ID of the first version in this chain (null = this record is the root)
+  chainId       String?
+  createdAt     DateTime @default(now())
+}
+
+model UserSettings {
+  id                     String  @id @default(cuid())
+  userId                 String  @unique
+  user                   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency               String  @default("USD")
+  dateFormat             String  @default("yyyy-MM-dd")
+  defaultMonthRange      Int     @default(6)
+  /// JSON string of default categories, parsed in application code
+  defaultCategories      String?
+  defaultSplitPercentage Int     @default(50)
+}
+
+model Settlement {
+  id          String      @id @default(cuid())
+  payerId     String
+  payer       User        @relation("PayerSettlements", fields: [payerId], references: [id])
+  payeeId     String
+  payee       User        @relation("PayeeSettlements", fields: [payeeId], references: [id])
+  amount      Decimal
+  date        DateTime    @default(now())
+  description String?
+  transactionId String?   @unique
+  transaction  Transaction? @relation(fields: [transactionId], references: [id])
+  createdAt   DateTime    @default(now())
+}
