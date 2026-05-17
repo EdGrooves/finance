@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/${GITHUB_REPOSITORY:-your-user/finance}:latest
+    image: ghcr.io/${GITHUB_REPOSITORY:-EdGrooves/finance}:latest
     ports:
       - "4000:4000"
     volumes:
