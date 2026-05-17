@@ -17,6 +17,7 @@ RUN npm run build
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 FROM node:20-alpine
+RUN apk add --no-cache su-exec
 WORKDIR /app
 
 # Server runtime deps
@@ -36,6 +37,8 @@ RUN chmod +x ./entrypoint.sh
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATABASE_URL=file:/app/data/finance.db
+ENV PUID=1000
+ENV PGID=1000
 
 EXPOSE 4000
 VOLUME ["/app/data"]
