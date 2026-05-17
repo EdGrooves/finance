@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -16,12 +18,17 @@ const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const IS_PROD = process.env.NODE_ENV === "production";
 
+app.use(helmet({ contentSecurityPolicy: false })); // CSP off — frontend uses inline styles
+
 if (!IS_PROD) {
   const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
   app.use(cors({ origin: CORS_ORIGIN }));
 }
 
 app.use(express.json());
+
+app.use("/api/auth/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/auth/register", rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false }));
 
 app.use("/api", authRouter);
 app.use("/api", usersRouter);
