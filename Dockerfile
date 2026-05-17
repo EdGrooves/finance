@@ -12,15 +12,16 @@ WORKDIR /app
 COPY server/package*.json ./
 RUN npm ci
 COPY server/ .
+RUN apk add --no-cache openssl
 RUN npx prisma generate
 RUN npm run build
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 FROM node:20-alpine
-RUN apk add --no-cache su-exec
+RUN apk add --no-cache su-exec openssl
 WORKDIR /app
 
-# Server runtime deps
+# Server runtime deps (node_modules includes pre-built Prisma engines)
 COPY --from=server-build /app/node_modules ./node_modules
 COPY --from=server-build /app/dist ./dist
 COPY --from=server-build /app/prisma ./prisma
