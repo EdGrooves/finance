@@ -222,6 +222,10 @@ export async function apiGetSettings() {
   return request<any>("/settings", { method: "GET" });
 }
 
+export async function apiGetUsedCategories() {
+  return request<{ transaction: string[]; fixedCost: string[] }>("/settings/categories-in-use", { method: "GET" });
+}
+
 export async function apiUpdateSettings(input: any) {
   return request<any>("/settings", {
     method: "PUT",

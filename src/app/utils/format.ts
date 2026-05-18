@@ -19,6 +19,49 @@ function _addMonths(date: Date, months: number): Date {
 }
 
 /**
+ * Returns the next payment date >= today, or null if ended.
+ */
+export function nextPaymentDate(
+  startDateStr: string,
+  frequency: string,
+  frequencyEvery: number,
+  endDateStr?: string | null,
+): Date | null {
+  const u = frequency.replace(/LY$/, "").replace(/S$/, "");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const endDate = endDateStr ? new Date(endDateStr) : null;
+  let current = new Date(startDateStr);
+
+  if (u === "WEEK") {
+    const intervalDays = frequencyEvery * 7;
+    const diffDays = (today.getTime() - current.getTime()) / (24 * 60 * 60 * 1000);
+    if (diffDays > 0) {
+      const skip = Math.floor(diffDays / intervalDays);
+      current = _addDays(current, skip * intervalDays);
+    }
+    while (current < today) current = _addDays(current, intervalDays);
+  } else if (u === "MONTH") {
+    const diffMonths = (today.getFullYear() - current.getFullYear()) * 12 + (today.getMonth() - current.getMonth());
+    if (diffMonths > 0) {
+      const skip = Math.floor(diffMonths / frequencyEvery);
+      current = _addMonths(current, skip * frequencyEvery);
+    }
+    while (current < today) current = _addMonths(current, frequencyEvery);
+  } else {
+    const diffYears = today.getFullYear() - current.getFullYear();
+    if (diffYears > 0) {
+      const skip = Math.floor(diffYears / frequencyEvery);
+      current = _addMonths(current, skip * frequencyEvery * 12);
+    }
+    while (current < today) current = _addMonths(current, frequencyEvery * 12);
+  }
+
+  if (endDate && current > endDate) return null;
+  return current;
+}
+
+/**
  * Count how many times a recurring payment falls within a calendar month.
  * E.g. every-2-weeks starting 10 Jan → Jan has 2 hits (10th and 24th) = 2 * amount.
  * If no hit in that month, returns 0 (nothing owed that month).

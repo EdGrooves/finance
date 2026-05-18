@@ -1,9 +1,9 @@
 import { useEffect, useState, Fragment } from "react";
-import { Plus, Trash2, Edit2, History, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Edit2, History, AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
 import { apiCreateFixedCost, apiDeleteFixedCost, apiGetFixedCostHistory, apiGetFixedCosts, apiGetUsers, apiUpdateFixedCost } from "../api/client";
 import type { FixedCostHistoryEntry } from "../api/client";
 import { useAuth } from "../api/AuthContext";
-import { formatCurrency, countPaymentsInMonth } from "../utils/format";
+import { formatCurrency, countPaymentsInMonth, nextPaymentDate } from "../utils/format";
 import { useCategories } from "../hooks/useCategories";
 import type { User } from "../types";
 import { FixedCostFormModal, EMPTY_FORM, formatFrequency } from "../components/FixedCostFormModal";
@@ -45,6 +45,7 @@ export function FixedCosts() {
   const [deletePrompt, setDeletePrompt] = useState<{ id: string; hasHistory: boolean } | null>(null);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [historyCache, setHistoryCache] = useState<Record<string, FixedCostHistoryEntry[]>>({});
+  const [amountSort, setAmountSort] = useState<"desc" | "asc">("desc");
   const [, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -235,7 +236,7 @@ export function FixedCosts() {
         {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
       </div>
 
-      <div className="max-w-5xl">
+      <div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -245,12 +246,17 @@ export function FixedCosts() {
                 <th className="px-6 py-3 text-left text-sm text-gray-600" style={{ fontWeight: 600 }}>Start Date</th>
                 <th className="px-6 py-3 text-left text-sm text-gray-600" style={{ fontWeight: 600 }}>Frequency</th>
                 <th className="px-6 py-3 text-left text-sm text-gray-600" style={{ fontWeight: 600 }}>Shared With</th>
-                <th className="px-6 py-3 text-right text-sm text-gray-600" style={{ fontWeight: 600 }}>Amount</th>
+                <th className="px-6 py-3 text-right text-sm text-gray-600 cursor-pointer select-none hover:text-gray-900" style={{ fontWeight: 600 }} onClick={() => setAmountSort(s => s === "desc" ? "asc" : "desc")}>
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Amount
+                    {amountSort === "desc" ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                  </span>
+                </th>
                 <th className="px-6 py-3 text-right text-sm text-gray-600" style={{ fontWeight: 600 }}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {costs.map((cost) => {
+              {[...costs].sort((a, b) => amountSort === "desc" ? b.amount - a.amount : a.amount - b.amount).map((cost) => {
                 const isOwn = cost.ownerId === currentUser?.id;
                 const owner = !isOwn ? userById(cost.ownerId) : null;
                 const historyEntries = historyCache[cost.id];
@@ -388,21 +394,41 @@ export function FixedCosts() {
           Add Fixed Cost
         </button>
 
-        <div className="mt-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-6 text-white">
-          <h3 className="text-lg mb-4" style={{ fontWeight: 600 }}>Monthly Summary</h3>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-green-100 mb-1">Monthly Equivalent</p>
-              <p className="text-2xl" style={{ fontWeight: 600 }}>{formatCurrency(totalMonthly)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-green-100 mb-1">Number of Items</p>
-              <p className="text-2xl" style={{ fontWeight: 600 }}>{costs.length}</p>
-            </div>
-            <div>
-              <p className="text-sm text-green-100 mb-1">Average Cost</p>
-              <p className="text-2xl" style={{ fontWeight: 600 }}>{formatCurrency(costs.length ? totalMonthly / costs.length : 0)}</p>
-            </div>
+        <div className="mt-8">
+          <h3 className="text-base font-semibold text-gray-800 mb-3">Upcoming Payments</h3>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            {(() => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const upcoming = costs
+                .map(c => ({ c, next: nextPaymentDate(c.startDate, c.frequency, c.frequencyEvery, c.endDate) }))
+                .filter(x => x.next !== null)
+                .sort((a, b) => a.next!.getTime() - b.next!.getTime());
+
+              if (upcoming.length === 0) return <p className="px-5 py-4 text-sm text-gray-400">No upcoming payments.</p>;
+
+              return (
+                <div className="divide-y divide-gray-100">
+                  {upcoming.map(({ c, next }) => {
+                    const days = Math.round((next!.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+                    const isToday = days === 0;
+                    const isSoon = days <= 7;
+                    return (
+                      <div key={c.id} className="flex items-center gap-4 px-5 py-3">
+                        <div className={`w-14 text-center flex-shrink-0 rounded-lg py-1 text-xs font-semibold ${isToday ? "bg-red-100 text-red-700" : isSoon ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"}`}>
+                          {isToday ? "Today" : `${days}d`}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                          <p className="text-xs text-gray-400">{next!.toLocaleDateString("de-DE")} · {formatFrequency(c.frequency, c.frequencyEvery)}</p>
+                        </div>
+                        <div className="text-sm font-semibold text-gray-900 flex-shrink-0">{formatCurrency(c.amount)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

@@ -7,9 +7,10 @@ export interface CategoryListProps {
   categories: string[];
   onChange: (cats: string[]) => void;
   accent: "blue" | "purple";
+  inUse?: string[];
 }
 
-export function CategoryList({ title, description, categories, onChange, accent }: CategoryListProps) {
+export function CategoryList({ title, description, categories, onChange, accent, inUse = [] }: CategoryListProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [newValue, setNewValue] = useState("");
@@ -80,9 +81,13 @@ export function CategoryList({ title, description, categories, onChange, accent 
                   <button onClick={() => startEdit(i)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => remove(i)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {inUse.includes(cat) ? (
+                    <span className="px-2 py-0.5 text-xs text-gray-400 rounded" title="In use — cannot delete">in use</span>
+                  ) : (
+                    <button onClick={() => remove(i)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </>
             )}
