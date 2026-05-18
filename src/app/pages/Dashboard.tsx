@@ -117,11 +117,11 @@ export function Dashboard() {
   // Returns this user's effective cost on a transaction:
   // own transactions = full amount; split transactions paid by others = split amount
   const getUserAmount = (t: Transaction): number => {
-    if (t.paidBy === currentUserId) return t.amount;
-    const split = t.splits?.find((s) => s.userId === currentUserId);
-    if (split?.amount != null) return split.amount;
-    if (split?.percentage != null) return t.amount * split.percentage / 100;
-    return t.isShared ? t.amount * 0.5 : 0;
+    const mySplit = t.splits?.find((s) => s.userId === currentUserId);
+    if (mySplit?.amount != null) return mySplit.amount;
+    if (mySplit?.percentage != null) return t.amount * mySplit.percentage / 100;
+    if (t.isShared) return t.amount * 0.5;
+    return t.paidBy === currentUserId ? t.amount : 0;
   };
 
   const monthTransactions = transactions.filter((t) => {
