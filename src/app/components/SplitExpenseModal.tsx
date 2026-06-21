@@ -23,6 +23,7 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
     description: "",
     amount: "",
     category: "",
+    date: new Date().toISOString().slice(0, 10),
     paidBy: currentUserId,
   });
 
@@ -114,7 +115,7 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
             description: expense.description,
             amount: totalAmount,
             category: expense.category,
-            date: new Date().toISOString().slice(0, 10),
+            date: expense.date,
             paidBy: expense.paidBy,
             isShared: false,
           } as any);
@@ -139,7 +140,7 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
             description: expense.description,
             amount: totalAmount,
             category: expense.category,
-            date: new Date().toISOString().slice(0, 10),
+            date: expense.date,
             paidBy: expense.paidBy,
             isShared: true,
             splits: payloadSplits,
@@ -224,6 +225,19 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 required
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-700 mb-1.5">Date</label>
+                <input
+                  type="date"
+                  value={expense.date}
+                  onChange={(e) => setExpense({ ...expense, date: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  required
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

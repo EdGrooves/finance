@@ -650,6 +650,10 @@ export function Dashboard() {
            transaction={selectedTransaction}
            users={users}
            onClose={() => setSelectedTransaction(null)}
+           onUpdated={(tx) => {
+             setTransactions((prev) => prev.map((t) => (t.id === tx.id ? tx : t)));
+             setSelectedTransaction(tx);
+           }}
          />
        )}
     </div>
