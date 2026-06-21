@@ -12,11 +12,6 @@ interface SplitExpenseModalProps {
   onCreated?: (tx: Transaction) => void;
 }
 
-interface UserSplit {
-  userId: string;
-  amount: number;
-  percentage: number;
-}
 export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: SplitExpenseModalProps) {
   const { transactionCategories: categories } = useCategories();
   const [expense, setExpense] = useState({
@@ -28,79 +23,38 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
   });
 
   const [splitMode, setSplitMode] = useState<'percentage' | 'amount'>('percentage');
-  // Participants selected from the "Split with" list (other users, not the payer)
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [splits, setSplits] = useState<{ [userId: string]: UserSplit }>({});
-  const [splitDisplayValues, setSplitDisplayValues] = useState<{ [userId: string]: string }>({});
+  // Two-person household: the only other party always gets this share, payer gets the remainder.
+  const [otherDisplayValue, setOtherDisplayValue] = useState("50");
   const [isSharedExpense, setIsSharedExpense] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const amount = parseFloat(expense.amount) || 0;
+  const otherUser = users.find(u => u.id !== expense.paidBy);
+  const payer = users.find(u => u.id === expense.paidBy);
 
-  const toggleUser = (userId: string) => {
-    if (selectedUsers.includes(userId)) {
-      if (selectedUsers.length > 1) {
-        const newSelected = selectedUsers.filter(id => id !== userId);
-        setSelectedUsers(newSelected);
-        const newSplits = { ...splits };
-        delete newSplits[userId];
-        redistributeSplits(newSelected, newSplits);
-      }
-    } else {
-      const newSelected = [...selectedUsers, userId];
-      setSelectedUsers(newSelected);
-      const newSplits = { ...splits, [userId]: { userId, amount: 0, percentage: 0 } };
-      redistributeSplits(newSelected, newSplits);
-    }
-  };
+  const otherRaw = parseFloat(otherDisplayValue) || 0;
+  const otherPercentage = splitMode === 'percentage' ? otherRaw : (amount > 0 ? (otherRaw / amount) * 100 : 0);
+  const otherAmount = splitMode === 'amount' ? otherRaw : (amount * otherRaw) / 100;
+  const payerPercentage = 100 - otherPercentage;
+  const payerAmount = amount - otherAmount;
 
-  const redistributeSplits = (users: string[], _currentSplits: { [userId: string]: UserSplit }) => {
-    if (users.length === 0) {
-      setSplits({});
-      setSplitDisplayValues({});
-      return;
-    }
+  const isValid = splitMode === 'percentage'
+    ? otherPercentage <= 100.01
+    : otherAmount <= amount + 0.01;
 
-    const equalPercentage = 100 / users.length;
-    const equalAmount = amount / users.length;
-
-    const newSplits: { [userId: string]: UserSplit } = {};
-    const newDisplay: { [userId: string]: string } = {};
-    users.forEach(userId => {
-      newSplits[userId] = { userId, percentage: equalPercentage, amount: equalAmount };
-      newDisplay[userId] = splitMode === 'percentage'
-        ? String(Math.round(equalPercentage))
-        : equalAmount.toFixed(2);
-    });
-
-    setSplits(newSplits);
-    setSplitDisplayValues(newDisplay);
-  };
-
-  const updateSplitRaw = (userId: string, raw: string) => {
-    setSplitDisplayValues(prev => ({ ...prev, [userId]: raw }));
-    const value = parseFloat(raw) || 0;
-    if (splitMode === 'percentage') {
-      setSplits(prev => ({
-        ...prev,
-        [userId]: { ...prev[userId], percentage: value, amount: (amount * value) / 100 },
-      }));
-    } else {
-      setSplits(prev => ({
-        ...prev,
-        [userId]: { ...prev[userId], amount: value, percentage: amount > 0 ? (value / amount) * 100 : 0 },
-      }));
-    }
+  const handleSplitModeChange = (mode: 'percentage' | 'amount') => {
+    // Carry the current split over when switching units, instead of resetting to 50.
+    setOtherDisplayValue(mode === 'percentage' ? String(Math.round(otherPercentage)) : otherAmount.toFixed(2));
+    setSplitMode(mode);
   };
 
   const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault();
 
-    const totalAmount = amount;
-    const hasBasicFields = !!expense.description && !!expense.category && totalAmount > 0;
+    const hasBasicFields = !!expense.description && !!expense.category && amount > 0;
     if (!hasBasicFields) return;
-    if (isSharedExpense && !isValid) return;
+    if (isSharedExpense && (!otherUser || !isValid)) return;
 
     setError(null);
     setSubmitting(true);
@@ -110,10 +64,9 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
         let tx: Transaction;
 
         if (!isSharedExpense) {
-          // Personal expense: no splits, not shared
           tx = await apiCreateTransaction({
             description: expense.description,
-            amount: totalAmount,
+            amount,
             category: expense.category,
             date: expense.date,
             paidBy: expense.paidBy,
@@ -121,14 +74,11 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
           } as any);
         } else {
           const payloadSplits = [
-            ...selectedUsers.map((userId) => {
-              const s = splits[userId];
-              return {
-                userId,
-                amount: splitMode === "amount" ? s.amount : undefined,
-                percentage: splitMode === "percentage" ? s.percentage : undefined,
-              };
-            }),
+            {
+              userId: otherUser!.id,
+              amount: splitMode === "amount" ? otherAmount : undefined,
+              percentage: splitMode === "percentage" ? otherPercentage : undefined,
+            },
             {
               userId: expense.paidBy,
               amount: splitMode === "amount" ? payerAmount : undefined,
@@ -138,7 +88,7 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
 
           tx = await apiCreateTransaction({
             description: expense.description,
-            amount: totalAmount,
+            amount,
             category: expense.category,
             date: expense.date,
             paidBy: expense.paidBy,
@@ -159,8 +109,6 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
     void run();
   };
 
-  const getUserById = (id: string) => users.find(u => u.id === id);
-
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -169,23 +117,6 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
       .toUpperCase()
       .slice(0, 2);
   };
-
-  // Only consider currently selected users when computing totals
-  const selectedSplits = selectedUsers
-    .map((id) => splits[id])
-    .filter((s): s is UserSplit => !!s);
-
-  const totalPercentage = selectedSplits.reduce((sum, s) => sum + s.percentage, 0);
-  const totalAmount = selectedSplits.reduce((sum, s) => sum + s.amount, 0);
-
-  // Payer's share is the remainder after assigning splits to other participants
-  const payerPercentage = 100 - totalPercentage;
-  const payerAmount = amount - totalAmount;
-
-  // Valid when others don't over-allocate (payer gets what's left, which must be >= 0)
-  const isValid = splitMode === 'percentage'
-    ? totalPercentage <= 100.01
-    : totalAmount <= amount + 0.01;
 
   const hasBasicFields = !!expense.description && !!expense.category && amount > 0;
   const canSubmit = hasBasicFields && (!isSharedExpense || isValid);
@@ -249,10 +180,7 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
                     type="number"
                     step="0.01"
                     value={expense.amount}
-                    onChange={(e) => {
-                      setExpense({ ...expense, amount: e.target.value });
-                      redistributeSplits(selectedUsers, splits);
-                    }}
+                    onChange={(e) => setExpense({ ...expense, amount: e.target.value })}
                     placeholder="0.00"
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     required
@@ -330,205 +258,129 @@ export function SplitExpenseModal({ onClose, users, currentUserId, onCreated }: 
             </div>
           </div>
 
-          {/* Split Section */}
-          {isSharedExpense && <div className="border-t border-gray-200 pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm text-gray-900" style={{ fontWeight: 600 }}>
-                Split with
-              </h3>
-              <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setSplitMode('percentage')}
-                  className={`px-3 py-1.5 rounded-md text-xs transition-all ${
-                    splitMode === 'percentage'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600'
-                  }`}
-                  style={{ fontWeight: 500 }}
-                >
-                  <Percent className="w-3 h-3 inline mr-1" />
-                  Percentage
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSplitMode('amount')}
-                  className={`px-3 py-1.5 rounded-md text-xs transition-all ${
-                    splitMode === 'amount'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600'
-                  }`}
-                  style={{ fontWeight: 500 }}
-                >
-                  <Euro className="w-3 h-3 inline mr-1" />
-                  Amount
-                </button>
-              </div>
-            </div>
-
-            {/* User Selection (exclude current user) */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-               {users.filter(user => user.id !== expense.paidBy).map((user) => {
-                const isSelected = selectedUsers.includes(user.id);
-                return (
+          {/* Split Section — always between payer and the one other person */}
+          {isSharedExpense && otherUser && (
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm text-gray-900" style={{ fontWeight: 600 }}>
+                  Split with {otherUser.name}
+                </h3>
+                <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
                   <button
-                    key={user.id}
                     type="button"
-                    onClick={() => toggleUser(user.id)}
-                    className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                      isSelected
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                    onClick={() => handleSplitModeChange('percentage')}
+                    className={`px-3 py-1.5 rounded-md text-xs transition-all ${
+                      splitMode === 'percentage'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600'
                     }`}
+                    style={{ fontWeight: 500 }}
                   >
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm"
-                      style={{ backgroundColor: user.color, fontWeight: 500 }}
-                    >
-                      {getInitials(user.name)}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-sm text-gray-900" style={{ fontWeight: 500 }}>
-                        {user.name}
-                      </p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
-                    </div>
+                    <Percent className="w-3 h-3 inline mr-1" />
+                    Percentage
                   </button>
-                );
-              })}
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSplitModeChange('amount')}
+                    className={`px-3 py-1.5 rounded-md text-xs transition-all ${
+                      splitMode === 'amount'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600'
+                    }`}
+                    style={{ fontWeight: 500 }}
+                  >
+                    <Euro className="w-3 h-3 inline mr-1" />
+                    Amount
+                  </button>
+                </div>
+              </div>
 
-            {/* Split Inputs */}
-            {selectedUsers.length > 0 && amount > 0 && (
               <div className="space-y-3">
-                 {selectedUsers.map((userId) => {
-                  const user = getUserById(userId);
-                  if (!user) return null;
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs"
+                    style={{ backgroundColor: otherUser.color, fontWeight: 500 }}
+                  >
+                    {getInitials(otherUser.name)}
+                  </div>
+                  <span className="flex-1 text-sm text-gray-700">{otherUser.name}</span>
 
-                  return (
-                    <div
-                      key={userId}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs"
-                        style={{ backgroundColor: user.color, fontWeight: 500 }}
-                      >
-                        {getInitials(user.name)}
-                      </div>
-                      <span className="flex-1 text-sm text-gray-700">{user.name}</span>
-
-                      {splitMode === 'percentage' ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={splitDisplayValues[userId] ?? ''}
-                            onChange={(e) => updateSplitRaw(userId, e.target.value)}
-                            className="w-20 px-2 py-1.5 text-right bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                          />
-                          <span className="text-sm text-gray-500">%</span>
-                          <span className="text-sm text-gray-400 w-20 text-right">
-                            {formatCurrency(splits[userId]?.amount || 0)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Euro className="w-4 h-4 text-gray-400" />
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={splitDisplayValues[userId] ?? ''}
-                            onChange={(e) => updateSplitRaw(userId, e.target.value)}
-                            className="w-24 px-2 py-1.5 text-right bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                          />
-                          <span className="text-sm text-gray-400 w-16 text-right">
-                            {splits[userId]?.percentage.toFixed(1) || 0}%
-                          </span>
-                        </div>
-                      )}
+                  {splitMode === 'percentage' ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={otherDisplayValue}
+                        onChange={(e) => setOtherDisplayValue(e.target.value)}
+                        className="w-20 px-2 py-1.5 text-right bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                      <span className="text-sm text-gray-400 w-20 text-right">
+                        {formatCurrency(otherAmount)}
+                      </span>
                     </div>
-                  );
-                })}
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Euro className="w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={otherDisplayValue}
+                        onChange={(e) => setOtherDisplayValue(e.target.value)}
+                        className="w-24 px-2 py-1.5 text-right bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                      <span className="text-sm text-gray-400 w-16 text-right">
+                        {otherPercentage.toFixed(1)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Payer's implicit share (read-only) */}
-                {(() => {
-                  const payer = getUserById(expense.paidBy);
-                  if (!payer) return null;
-                  return (
-                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs"
-                        style={{ backgroundColor: payer.color, fontWeight: 500 }}
-                      >
-                        {getInitials(payer.name)}
-                      </div>
-                      <span className="flex-1 text-sm text-gray-700">
-                        {payer.name} <span className="text-xs text-blue-500">(paid)</span>
-                      </span>
-                      {splitMode === 'percentage' ? (
-                        <div className="flex items-center gap-2">
-                          <span className="w-20 px-2 py-1.5 text-right text-sm text-gray-500">
-                            {payerPercentage.toFixed(2)}%
-                          </span>
-                          <span className="text-sm text-gray-400 w-20 text-right">
-                            {formatCurrency(payerAmount)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Euro className="w-4 h-4 text-gray-300" />
-                          <span className="w-24 px-2 py-1.5 text-right text-sm text-gray-500">
-                            {payerAmount.toFixed(2)}
-                          </span>
-                          <span className="text-sm text-gray-400 w-16 text-right">
-                            {payerPercentage.toFixed(1)}%
-                          </span>
-                        </div>
-                      )}
+                {payer && (
+                  <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs"
+                      style={{ backgroundColor: payer.color, fontWeight: 500 }}
+                    >
+                      {getInitials(payer.name)}
                     </div>
-                  );
-                })()}
-
-                {/* Total */}
-                {isSharedExpense && selectedUsers.length > 0 && (
-                  <div className={`p-3 rounded-lg border-2 ${isValid ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm" style={{ fontWeight: 600 }}>Total</span>
-                      <div className="flex items-center gap-4">
-                        {splitMode === 'percentage' ? (
-                          <>
-                            <span className={`text-sm ${isValid ? 'text-green-700' : 'text-red-700'}`} style={{ fontWeight: 600 }}>
-                              {totalPercentage.toFixed(2)}%
-                            </span>
-                            <span className="text-sm text-gray-600">
-                              {formatCurrency(totalAmount)}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className={`text-sm ${isValid ? 'text-green-700' : 'text-red-700'}`} style={{ fontWeight: 600 }}>
-                              {formatCurrency(totalAmount)}
-                            </span>
-                            <span className="text-sm text-gray-600">
-                              {totalPercentage.toFixed(1)}%
-                            </span>
-                          </>
-                        )}
+                    <span className="flex-1 text-sm text-gray-700">
+                      {payer.name} <span className="text-xs text-blue-500">(paid)</span>
+                    </span>
+                    {splitMode === 'percentage' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="w-20 px-2 py-1.5 text-right text-sm text-gray-500">
+                          {payerPercentage.toFixed(2)}%
+                        </span>
+                        <span className="text-sm text-gray-400 w-20 text-right">
+                          {formatCurrency(payerAmount)}
+                        </span>
                       </div>
-                    </div>
-                    {!isValid && (
-                      <p className="text-xs text-red-600 mt-1">
-                        {splitMode === 'percentage'
-                          ? 'Other participants cannot exceed 100% — payer would owe negative amount'
-                          : `Other participants cannot exceed ${formatCurrency(amount)} — payer would owe negative amount`}
-                      </p>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Euro className="w-4 h-4 text-gray-300" />
+                        <span className="w-24 px-2 py-1.5 text-right text-sm text-gray-500">
+                          {payerAmount.toFixed(2)}
+                        </span>
+                        <span className="text-sm text-gray-400 w-16 text-right">
+                          {payerPercentage.toFixed(1)}%
+                        </span>
+                      </div>
                     )}
                   </div>
                 )}
+
+                {!isValid && (
+                  <p className="text-xs text-red-600">
+                    {splitMode === 'percentage'
+                      ? `${otherUser.name} cannot exceed 100% — payer would owe a negative amount`
+                      : `${otherUser.name} cannot exceed ${formatCurrency(amount)} — payer would owe a negative amount`}
+                  </p>
+                )}
               </div>
-            )}
-          </div>}
+            </div>
+          )}
 
            {/* Error & Actions */}
            {error && (
