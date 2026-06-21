@@ -1,23 +1,25 @@
 # ── Stage 1: Build frontend ───────────────────────────────────────────────────
-FROM node:20-alpine AS frontend-build
+FROM node:24-alpine AS frontend-build
+RUN corepack enable
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # ── Stage 2: Build server ─────────────────────────────────────────────────────
-FROM node:20-alpine AS server-build
-WORKDIR /app
-COPY server/package*.json ./
-RUN npm ci
-COPY server/ .
+FROM node:24-alpine AS server-build
+RUN corepack enable
 RUN apk add --no-cache openssl
-RUN npx prisma generate
-RUN npm run build
+WORKDIR /app
+COPY server/package.json server/pnpm-lock.yaml server/pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
+COPY server/ .
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm rebuild
+RUN pnpm run build
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM node:20-alpine
+FROM node:24-alpine
 RUN apk add --no-cache su-exec openssl
 WORKDIR /app
 
