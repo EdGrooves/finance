@@ -476,11 +476,13 @@ export function Dashboard() {
 
       {/* Fixed Costs This Month */}
       {fixedCosts.length > 0 && (() => {
-        const rows = fixedCosts.map((c) => {
-          const hits = countPaymentsInMonth(c.startDate, c.frequency, c.frequencyEvery, selectedMonth.year, selectedMonth.month, c.endDate);
-          const share = c.isShared ? 0.5 : 1;
-          return { ...c, hits, yourCost: hits * c.amount * share };
-        });
+        const rows = fixedCosts
+          .map((c) => {
+            const hits = countPaymentsInMonth(c.startDate, c.frequency, c.frequencyEvery, selectedMonth.year, selectedMonth.month, c.endDate);
+            const share = c.isShared ? 0.5 : 1;
+            return { ...c, hits, yourCost: hits * c.amount * share };
+          })
+          .sort((a, b) => (a.hits === 0 ? 1 : 0) - (b.hits === 0 ? 1 : 0));
         const unitLabels: Record<string, [string, string]> = {
           WEEK: ["week", "weeks"], MONTH: ["month", "months"], YEAR: ["year", "years"],
         };
@@ -518,7 +520,7 @@ export function Dashboard() {
                     </td>
                     <td className="px-6 py-3 text-sm text-gray-500">{fmtFreq(r.frequency, r.frequencyEvery)}</td>
                     <td className="px-6 py-3 text-sm text-center text-gray-700">{r.hits === 0 ? "—" : r.hits}</td>
-                    <td className="px-6 py-3 text-sm text-right text-gray-700">{formatCurrency(r.amount * (r.isShared ? 0.5 : 1))}</td>
+                    <td className="px-6 py-3 text-sm text-right text-gray-700">{formatCurrency(r.amount)}</td>
                     <td className="px-6 py-3 text-sm text-right text-gray-900" style={{ fontWeight: 600 }}>
                       {r.hits === 0 ? <span className="text-gray-400 font-normal">not due</span> : formatCurrency(r.yourCost)}
                     </td>
