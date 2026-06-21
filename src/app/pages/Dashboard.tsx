@@ -205,7 +205,7 @@ export function Dashboard() {
     const byMonth = new Map<string, number>();
     transactions.forEach((t) => {
       const d = new Date(t.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
       byMonth.set(key, (byMonth.get(key) || 0) + getUserAmount(t));
     });
 
@@ -213,18 +213,21 @@ export function Dashboard() {
     const lastFive = entries.slice(-5);
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return lastFive.map(([key, spending]) => {
-      const monthIndex = Number(key.split("-")[1]);
-      return { month: monthNames[monthIndex] || "", spending };
+      const [year, monthStr] = key.split("-");
+      const monthIndex = Number(monthStr);
+      return { month: `${monthNames[monthIndex] || ""} '${year.slice(2)}`, spending };
     });
   })();
 
   const categoryData = (() => {
     const byCat = new Map<string, number>();
+    const sharedByCat = new Map<string, number>();
     monthTransactions.forEach((t) => {
       byCat.set(t.category, (byCat.get(t.category) || 0) + getUserAmount(t));
+      if (t.isShared) sharedByCat.set(t.category, (sharedByCat.get(t.category) || 0) + getUserAmount(t));
     });
     return Array.from(byCat.entries()).map(([name, value]: [string, number]) => ({
-      name, value, color: CATEGORY_COLORS[name] || "#6b7280",
+      name, value, color: CATEGORY_COLORS[name] || "#6b7280", sharedAmount: sharedByCat.get(name) || 0,
     }));
   })();
 
@@ -294,25 +297,31 @@ export function Dashboard() {
               <DollarSign className="w-6 h-6 text-green-600" />
             </div>
           </div>
-          <p className="text-gray-500 text-sm mb-1">Total Spending</p>
+          <p className="text-gray-500 text-sm mb-1">Total Spending · Your total this month</p>
           {(() => {
-            const total = ownFixedCostsMonthly + sharedFixedCostsMonthly + totalSpending;
-            const fixedPct = total > 0 ? ((ownFixedCostsMonthly + sharedFixedCostsMonthly) / total) * 100 : 0;
+            const yourFixed = ownFixedCostsMonthly + sharedFixedCostsMonthly;
+            const total = yourFixed + totalSpending;
+            const fixedPct = total > 0 ? (yourFixed / total) * 100 : 0;
             const varPct = total > 0 ? (totalSpending / total) * 100 : 0;
             return (
               <>
-                <p className="text-2xl text-gray-900 mb-1" style={{ fontWeight: 600 }}>
+                <p className="text-2xl text-gray-900 mb-3" style={{ fontWeight: 600 }}>
                   {formatCurrency(total)}
                 </p>
-                <p className="text-xs text-gray-400 mb-3">Your total · this month</p>
-                <div>
-                  <div className="flex rounded-full overflow-hidden h-1.5 mb-2">
+                <div className="mb-3">
+                  <div className="flex rounded-full overflow-hidden h-1.5">
                     <div className="bg-blue-400 transition-all" style={{ width: `${fixedPct}%` }} />
                     <div className="bg-purple-400 transition-all" style={{ width: `${varPct}%` }} />
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-400">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />Fixed</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />Variable</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-blue-50 rounded-lg px-3 py-2">
+                    <p className="text-xs text-blue-500 mb-0.5">Fixed</p>
+                    <p className="text-sm text-blue-900" style={{ fontWeight: 600 }}>{formatCurrency(yourFixed)}</p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg px-3 py-2">
+                    <p className="text-xs text-purple-500 mb-0.5">Variable</p>
+                    <p className="text-sm text-purple-900" style={{ fontWeight: 600 }}>{formatCurrency(totalSpending)}</p>
                   </div>
                 </div>
               </>
@@ -472,6 +481,11 @@ export function Dashboard() {
                     style={{ backgroundColor: cat.color }}
                   />
                   <span className="text-gray-700">{cat.name}</span>
+                  {cat.sharedAmount > 0 && (
+                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded-full" title="Includes shared expenses">
+                      shared {formatCurrency(cat.sharedAmount)}
+                    </span>
+                  )}
                 </div>
                 <span className="text-gray-900" style={{ fontWeight: 500 }}>
                   {formatCurrency(cat.value)}
